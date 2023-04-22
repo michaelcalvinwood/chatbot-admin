@@ -13,6 +13,8 @@ const app = express();
 
 const smtp = require('./utils/smtpCom');
 const mysql = require('./utils/mysql');
+const bcrypt = require("bcrypt")
+
 
 const { JWT_SECRET, CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER, CONFIG_MYSQL_PASSWORD } = process.env;
 
@@ -23,14 +25,7 @@ const { JWT_SECRET, CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER,
 
 const configPool = mysql.pool(CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER, CONFIG_MYSQL_PASSWORD);
 
-
-
-const test = async () => {
-    const result = await mysql.query(configPool, 'SHOW DATABASES');
-
-    console.log(result);
-}
-test();
+const getPasswordHash = (password, saltRounds = 10) => bcrypt.hash(password, saltRounds);
 
 function extractToken(info) {
     // if invalid return false
@@ -91,7 +86,7 @@ const sendVerificationEmail = (req, res) => {
 }
 
 const verifyEmailToken = (req, res) => {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         if (!req.query || !req.query.t) {
             res.status(400).json('bad request');
             return resolve('error 001');
@@ -105,10 +100,18 @@ const verifyEmailToken = (req, res) => {
     
         const info = token.msg;
 
+        const { email, userName, password } = info;
+
         console.log(info);
 
-        res.status(200).json(info);
+        const passwordHash = await getPasswordHash(password);
 
+        const q = `INSERT INTO account (user_name, email, password, storage_tokens, query_tokens, status) VALUES
+        ('${userName}', '${email}', '${passwordHash}', ${1000000}, ${20}, '${JSON.stringify({status: 'verified'})}')`
+
+        let result = await mysql.query(configPool, q);
+
+        res.redirect('https://instantchatbot.net/login')
         return resolve('ok');
     })
 }
