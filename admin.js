@@ -1,7 +1,7 @@
 const listenPort = 6200;
 const hostname = 'admin.instantchatbot.net'
 const privateKeyPath = `/home/sslkeys/instantchatbot.net.key`;
-const fullchainPath = `/home/sslkeys/instantchatbot.net.key`;
+const fullchainPath = `/home/sslkeys/instantchatbot.net.pem`;
 
 const express = require('express');
 const https = require('https');
