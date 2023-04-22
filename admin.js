@@ -7,23 +7,51 @@ const express = require('express');
 const https = require('https');
 const cors = require('cors');
 const fs = require('fs');
-
+const jwt = require('jsonwebtoken');
 const app = express();
 
-app.use((req, res, next) => {
-    console.log(req);
-    next();
-})
+const { JWT_SECRET } = process.env;
+
+// app.use((req, res, next) => {
+//     console.log(req);
+//     next();
+// })
+
+function extractToken(info) {
+    // if invalid return false
+    try {
+        if (!jwt.verify(info, process.env.SECRET_KEY)) return {status: false, msg: 'invalid token'};
+    } catch (err) {
+        return {status: false, msg: 'invalid token'}
+    }
+    const token = jwt.decode(info);
+    const curTime = new Date();
+
+    // if expired return false
+    if (token.exp < curTime.getTime()/1000) return {status: false, msg: 'token has expired'};
+
+    return {status: true, msg: token};
+}
 
 app.use(express.static('public'));
 app.use(express.json({limit: '200mb'})); 
 app.use(cors());
 
-app.get('/yoyo', (req, res) => {
+app.get('/', (req, res) => {
     res.send('Hello, World!');
 });
 
+app.get('/verify', (req, res) => {
+    if (!req.query || !req.query.t) return res.status(400).json('bad request');
 
+    const token = extractToken(req.query.t);
+
+    if (!token.status) return res.status(400).json(token.msg);
+
+    console.log(token.msg);
+
+    res.status(200).json('ok');
+})
 
 app.post('/signup', (req, res) => {
     const { email, userName, password } = req.body;
