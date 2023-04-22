@@ -47,7 +47,7 @@ exports.sendEmail = (recipientEmailAddress, senderEmailAddress, subject, html, f
            // TODO: add error function that not only sends errors to customers but logs them in the error database as well
            // TODO: use this error function for all res errors.
     
-           console.log('error', JSON.stringify(err));
+           console.log('error', JSON.stringify(err.data));
            reject(err)
            return;
        })
@@ -60,4 +60,4 @@ const testEmail = () => {
     this.sendEmail('michaelwood33311@icloud.com', 'noreply@instantchatbot.net', 'Verify Email Address', "Hello, this is an email test", 'Instant ChatBot');
 }
 
-testEmail();
+//testEmail();
