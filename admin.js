@@ -17,6 +17,19 @@ app.get('/', (req, res) => {
     res.send('Hello, World!');
 });
 
+app.post('/signup', (req, res) => {
+    const { email, userName, password } = req.body;
+
+    if (!email || !userName || !password) return res.status(400).json('bad request');
+
+    /*
+     * TODO: Add server-side validation of email, password, and username
+     */
+
+    res.status(200).json('ok');
+    
+})
+
 const httpsServer = https.createServer({
     key: fs.readFileSync(privateKeyPath),
     cert: fs.readFileSync(fullchainPath),
