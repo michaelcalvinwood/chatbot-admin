@@ -20,3 +20,5 @@ exports.query = (pool, query) => {
     });
     })
 }
+
+exports.escape = str => mysql.escape(str);

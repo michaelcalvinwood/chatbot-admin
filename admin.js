@@ -27,6 +27,18 @@ const configPool = mysql.pool(CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_M
 
 const getPasswordHash = (password, saltRounds = 10) => bcrypt.hash(password, saltRounds);
 
+const isValidUser = async (password, hash) => 
+{
+    let res;
+    try {
+       res = await bcrypt.compare(password, hash);
+    } catch (err) {
+        return false;
+    }
+    
+    return res;
+}
+
 function extractToken(info) {
     // if invalid return false
     try {
@@ -116,6 +128,38 @@ const verifyEmailToken = (req, res) => {
     })
 }
 
+const handleLogin = (req, res) => {
+    return new Promise(async (resolve, reject) => {
+        const { userName, password } = req.body;
+
+        if (!userName || !password) {
+            res.status(400).json('bad request');
+            resolve('error 001');
+            return;
+        }
+
+        const q = `SELECT password FROM account WHERE user_name = ${mysql.escape(userName)}`;
+        const result = await mysql.query(configPool, q);
+        if (!result.length) {
+            res.status(400).json('bad request');
+            resolve('error 002');
+            return;
+        }
+
+        const hash = result[0].password;
+
+        const test = await isValidUser(password, hash);
+
+        if (!test) {
+            res.status(401).json('invalid credentials');
+            resolve('error 003');
+            return;
+        }
+
+        res.status(200).json('ok');
+    })
+}
+
 app.use(express.static('public'));
 app.use(express.json({limit: '200mb'})); 
 app.use(cors());
@@ -126,16 +170,8 @@ app.get('/', (req, res) => {
 
 app.get('/verify', (req, res) => verifyEmailToken(req, res));
 
-
-
-
-
-
-
-
-
 app.post('/signup', (req, res) => sendVerificationEmail(req, res));
-
+app.post('/login', (req, res) => handleLogin(req, res));
 
 const httpsServer = https.createServer({
     key: fs.readFileSync(privateKeyPath),
