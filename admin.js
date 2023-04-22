@@ -12,13 +12,25 @@ const jwt = require('jsonwebtoken');
 const app = express();
 
 const smtp = require('./utils/smtpCom');
+const mysql = require('./utils/mysql');
 
-const { JWT_SECRET } = process.env;
+const { JWT_SECRET, CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER, CONFIG_MYSQL_PASSWORD } = process.env;
 
 // app.use((req, res, next) => {
 //     console.log(req);
 //     next();
 // })
+
+const configPool = mysql.pool(CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER, CONFIG_MYSQL_PASSWORD);
+
+
+
+const test = async () => {
+    const result = await mysql.query(configPool, 'SHOW DATABASES');
+
+    console.log(result);
+}
+test();
 
 function extractToken(info) {
     // if invalid return false
