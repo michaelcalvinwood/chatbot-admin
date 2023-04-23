@@ -39,7 +39,7 @@ const isValidUser = async (password, hash) =>
     return res;
 }
 
-function extractToken(info) {
+function extractToken(info, expiredCheck = false) {
     // if invalid return false
     try {
         if (!jwt.verify(info, JWT_SECRET)) return {status: false, msg: 'invalid token'};
@@ -47,10 +47,11 @@ function extractToken(info) {
         return {status: false, msg: 'invalid token'}
     }
     const token = jwt.decode(info);
-    const curTime = new Date();
 
-    // if expired return false
-    if (token.exp < curTime.getTime()/1000) return {status: false, msg: 'token has expired'};
+    if (expiredCheck) {
+        const curTime = new Date();
+        if (token.exp < curTime.getTime()/1000) return {status: false, msg: 'token has expired'};
+    }
 
     return {status: true, msg: token};
 }
@@ -136,33 +137,47 @@ const updateToken = async (userName, token) => {
 const getUserInfo = async (userName, password = '') => {
     const q = `SELECT password, storage_tokens, query_tokens, token FROM account WHERE user_name = ${mysql.escape(userName)}`;
     return await mysql.query(configPool, q);
+}
 
+const sendUserInfo = (userName, res, password) => {
+    return new Promise (async (resolve, reject) => {
 
+        const result = await getUserInfo(userName);
 
-    return;
-    if (password) {
+        if (!result.length) {
+            res.status(401).json('unauthorized');
+            return resolve('error 401');
+        }
+
         const hash = result[0].password;
     
         const test = await isValidUser(password, hash);
     
         if (!test) {     
-            return false;
+            res.status(401).json('unauthorized');
+            return resolve('error 402');
         }
-    }
+        
+    
+        const storageTokens = result[0].storage_tokens;
+        const queryTokens = result[0].query_tokens;
+        const token = result[0].token;
+        const tokenInfo = extractToken(token);
 
-    const storageTokens = result[0].storage_tokens;
-    const queryTokens = result[0].query_tokens;
-    //const openaiKeys = JSON.parse(result[0].openai_keys);
+        if (!tokenInfo.status) {
+            res.status(500).json('cannot decode token');
+            return resolve('error 500');
+        }
 
-    const hasKey = openaiKeys.length ? true : false;
+        console.log('token info', tokenInfo);
 
-    const token = jwt.sign({
-        userName, storageTokens, queryTokens, openaiKeys
-    }, JWT_SECRET, {expiresIn: '12h'});
+        const hasKey = tokenInfo.msg.openAIKeys.length ? true : false;
+        
+        res.status(200).json({userName, storageTokens, queryTokens, hasKey, token});
 
-    return token;
- 
-    res.status(200).json({userName, storageTokens, queryTokens, hasKey, token});
+        resolve ('ok');
+        return
+    })
 }
 
 const handleLogin = (req, res) => {
