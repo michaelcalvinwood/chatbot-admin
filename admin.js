@@ -73,7 +73,7 @@ const sendVerificationEmail = (req, res) => {
 
 
     let emailTemplate = fs.readFileSync('./email.html', 'utf-8');
-    let token =  jwt.sign({
+    let token = jwt.sign({
         email, userName, password
     }, JWT_SECRET, {expiresIn: '3h'});
 
@@ -128,6 +128,43 @@ const verifyEmailToken = (req, res) => {
     })
 }
 
+const updateToken = async (userName, token) => {
+    const q = `UPDATE account SET token = '${token}' WHERE user_name = '${userName}'`;
+    return await mysql.query(configPool, q);
+}
+
+const getUserInfo = async (userName, password = '') => {
+    const q = `SELECT password, storage_tokens, query_tokens, token FROM account WHERE user_name = ${mysql.escape(userName)}`;
+    return await mysql.query(configPool, q);
+
+
+
+    return;
+    if (password) {
+        const hash = result[0].password;
+    
+        const test = await isValidUser(password, hash);
+    
+        if (!test) {     
+            return false;
+        }
+    }
+
+    const storageTokens = result[0].storage_tokens;
+    const queryTokens = result[0].query_tokens;
+    //const openaiKeys = JSON.parse(result[0].openai_keys);
+
+    const hasKey = openaiKeys.length ? true : false;
+
+    const token = jwt.sign({
+        userName, storageTokens, queryTokens, openaiKeys
+    }, JWT_SECRET, {expiresIn: '12h'});
+
+    return token;
+ 
+    res.status(200).json({userName, storageTokens, queryTokens, hasKey, token});
+}
+
 const handleLogin = (req, res) => {
     return new Promise(async (resolve, reject) => {
         const { userName, password } = req.body;
@@ -138,25 +175,40 @@ const handleLogin = (req, res) => {
             return;
         }
 
-        const q = `SELECT password FROM account WHERE user_name = ${mysql.escape(userName)}`;
-        const result = await mysql.query(configPool, q);
-        if (!result.length) {
+        sendUserInfo(userName, res, password);
+       
+    })
+}
+
+const setKey = (req, res) => {
+    return new Promise(async (resolve, reject) => {
+        const { token, key } = req.body;
+
+        if (!token || !key) {
             res.status(400).json('bad request');
-            resolve('error 002');
-            return;
-        }
+            return resolve('Error 001');
+        } 
 
-        const hash = result[0].password;
+        tokenInfo = extractToken(token);
+        const { userName } = tokenInfo.msg;
 
-        const test = await isValidUser(password, hash);
+        console.log('token', userName, tokenInfo, key);
 
-        if (!test) {
-            res.status(401).json('invalid credentials');
-            resolve('error 003');
-            return;
-        }
+        const result = await getUserInfo(userName);
 
-        res.status(200).json('ok');
+        const storageTokens = result[0].storage_tokens;
+        const queryTokens = result[0].query_tokens;    
+        const hasKey = true;
+
+        const newToken = jwt.sign({
+            userName, storageTokens, queryTokens, openAIKeys: [key]
+        }, JWT_SECRET, {expiresIn: '12h'});
+
+        await updateToken(userName, newToken);
+
+        res.status(200).json({userName, storageTokens, queryTokens, hasKey, token: newToken});
+
+        return resolve('ok');
     })
 }
 
@@ -172,6 +224,7 @@ app.get('/verify', (req, res) => verifyEmailToken(req, res));
 
 app.post('/signup', (req, res) => sendVerificationEmail(req, res));
 app.post('/login', (req, res) => handleLogin(req, res));
+app.post('/key', (req, res) => setKey(req, res));
 
 const httpsServer = https.createServer({
     key: fs.readFileSync(privateKeyPath),
