@@ -231,17 +231,56 @@ const setKey = (req, res) => {
 const assignNewBot = (req, res) => {
     return new Promise (async (resolve, reject) => {
 
+        const { token, botName, websites } = req.body;
+
+        if (!token || !botName || !websites) {
+            res.status(400).json('bad request');
+            return resolve('error 400');
+        }
+
+        const decodedToken = extractToken(token, true);
+
+        if (!decodedToken.status) {
+            res.status(401).json(decodedToken.msg);
+            return resolve('error 401')
+        }
+
+        const tokenInfo = decodedToken.msg;
+
+        const {userName} = tokenInfo;
+
+
         // assign bot uuid
         const botId = uuidv4();
-        
+
         // get ingest, qdrant, and app servers
+        /*
+         * TODO: dynamically get names of these servers
+         */
+
+        const ingest = 'https://ingest-1.instantchatbot.net';
+        const chunk = 'https://chunk-1.instantchatbot.net';
+        const qdrant = 'https://qdrant-1.instantchatbot.net';
+        const app = 'https://app-1.instantchatbot.net';
 
         // set bot info in bots table
 
-        // create botToken out of all the bot info
+        let q = `INSERT INTO bots (user_name, bot_id, bot_name, websites, ingest, chunk, qdrant, app) VALUES 
+        ('${userName}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, '${ingest}', '${chunk}', '${qdrant}', '${app}')`;
 
-        // return botToken and name of ingest server
+        try {
+            await mysql.query(configPool, q);
+        } catch (err) {
+            res.status(500).json('Server Error: Could not insert bot info into database. Please try again later');
+            return resolve('error 500');
+        }
 
+
+        const botToken = jwt.sign({
+            userName, ingest, chunk, qdrant, app, botId
+        }, JWT_SECRET, {expiresIn: '1h'});
+
+        res.status(200).json({botToken, ingest});
         return resolve('ok')
     })
 }
