@@ -13,7 +13,8 @@ const app = express();
 
 const smtp = require('./utils/smtpCom');
 const mysql = require('./utils/mysql');
-const bcrypt = require("bcrypt")
+const bcrypt = require("bcrypt");
+const { v4: uuidv4 } = require('uuid');
 
 
 const { JWT_SECRET, CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER, CONFIG_MYSQL_PASSWORD } = process.env;
@@ -227,6 +228,24 @@ const setKey = (req, res) => {
     })
 }
 
+const assignNewBot = (req, res) => {
+    return new Promise (async (resolve, reject) => {
+
+        // assign bot uuid
+        const botId = uuidv4();
+        
+        // get ingest, qdrant, and app servers
+
+        // set bot info in bots table
+
+        // create botToken out of all the bot info
+
+        // return botToken and name of ingest server
+
+        return resolve('ok')
+    })
+}
+
 app.use(express.static('public'));
 app.use(express.json({limit: '200mb'})); 
 app.use(cors());
@@ -240,6 +259,7 @@ app.get('/verify', (req, res) => verifyEmailToken(req, res));
 app.post('/signup', (req, res) => sendVerificationEmail(req, res));
 app.post('/login', (req, res) => handleLogin(req, res));
 app.post('/key', (req, res) => setKey(req, res));
+app.post('/newBot', (req, res) => assignNewBot(req, res));
 
 const httpsServer = https.createServer({
     key: fs.readFileSync(privateKeyPath),
