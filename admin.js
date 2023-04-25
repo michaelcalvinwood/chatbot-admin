@@ -10,6 +10,7 @@ const cors = require('cors');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const app = express();
+const luxon = require('luxon');
 
 const smtp = require('./utils/smtpCom');
 const mysql = require('./utils/mysql');
@@ -45,6 +46,8 @@ function extractToken(info, expiredCheck = false) {
     try {
         if (!jwt.verify(info, JWT_SECRET)) return {status: false, msg: 'invalid token'};
     } catch (err) {
+        if (err.name && err.name === 'TokenExpiredError' && expiredCheck === false) return ({status:true, msg: jwt.decode(info)}) 
+        console.error(JSON.stringify(err));
         return {status: false, msg: 'invalid token'}
     }
     const token = jwt.decode(info);
@@ -119,9 +122,11 @@ const verifyEmailToken = (req, res) => {
         console.log(info);
 
         const passwordHash = await getPasswordHash(password);
+        const userId = uuidv4();
+        const oneMonth = luxon.DateTime.now().plus({months: 1}).toISODate();
 
-        const q = `INSERT INTO account (user_name, email, password, storage_tokens, query_tokens, status) VALUES
-        ('${userName}', '${email}', '${passwordHash}', ${1000000}, ${20}, '${JSON.stringify({status: 'verified'})}')`
+        const q = `INSERT INTO account (user_id, user_name, email, password, allowed_storage_tokens, allowed_query_tokens, storage_tokens, query_tokens, reset_date, expiration, status) VALUES
+        ('${userId}', '${userName}', '${email}', '${passwordHash}', ${1000000}, ${20}, ${1000000}, ${20}, '${oneMonth}', '${oneMonth}', '${JSON.stringify({status: 'verified'})}')`
 
         let result = await mysql.query(configPool, q);
 
@@ -165,6 +170,8 @@ const sendUserInfo = (userName, res, password) => {
         const token = result[0].token;
         const tokenInfo = extractToken(token);
 
+        console.log('extracting token', token);
+
         if (!tokenInfo.status) {
             res.status(500).json('cannot decode token');
             return resolve('error 500');
@@ -173,8 +180,12 @@ const sendUserInfo = (userName, res, password) => {
         console.log('token info', tokenInfo);
 
         const hasKey = tokenInfo.msg.openAIKeys.length ? true : false;
+
+        const newToken = jwt.sign({
+            userName, storageTokens, queryTokens, openAIKeys: tokenInfo.msg.openAIKeys
+        }, JWT_SECRET, {expiresIn: '12h'});
         
-        res.status(200).json({userName, storageTokens, queryTokens, hasKey, token});
+        res.status(200).json({userName, storageTokens, queryTokens, hasKey, token: newToken});
 
         resolve ('ok');
         return
@@ -258,15 +269,12 @@ const assignNewBot = (req, res) => {
          * TODO: dynamically get names of these servers
          */
 
-        const ingest = 'https://ingest-1.instantchatbot.net';
-        const chunk = 'https://chunk-1.instantchatbot.net';
-        const qdrant = 'https://qdrant-1.instantchatbot.net';
-        const app = 'https://app-1.instantchatbot.net';
+        const serverSeries = 1;
 
         // set bot info in bots table
 
-        let q = `INSERT INTO bots (user_name, bot_id, bot_name, websites, ingest, chunk, qdrant, app) VALUES 
-        ('${userName}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, '${ingest}', '${chunk}', '${qdrant}', '${app}')`;
+        let q = `INSERT INTO bots (user_name, bot_id, bot_name, websites, server_series) VALUES 
+        ('${userName}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, ${serverSeries})`;
 
         try {
             await mysql.query(configPool, q);
@@ -277,7 +285,7 @@ const assignNewBot = (req, res) => {
 
 
         const botToken = jwt.sign({
-            userName, ingest, chunk, qdrant, app, botId
+            userName, serverSeries, botId
         }, JWT_SECRET, {expiresIn: '1h'});
 
         res.status(200).json({botToken, ingest});
@@ -294,7 +302,6 @@ app.get('/', (req, res) => {
 });
 
 app.get('/verify', (req, res) => verifyEmailToken(req, res));
-
 app.post('/signup', (req, res) => sendVerificationEmail(req, res));
 app.post('/login', (req, res) => handleLogin(req, res));
 app.post('/key', (req, res) => setKey(req, res));
