@@ -190,7 +190,7 @@ const sendUserInfo = (userName, res, password) => {
             userName, userId, storageTokens, queryTokens, openAIKeys: tokenInfo.msg.openAIKeys
         }, JWT_SECRET, {expiresIn: '12h'});
         
-        res.status(200).json({userName, storageTokens, queryTokens, hasKey, token: newToken});
+        res.status(200).json({userId, userName, storageTokens, queryTokens, hasKey, token: newToken});
 
         resolve ('ok');
         return
@@ -263,8 +263,8 @@ const assignNewBot = (req, res) => {
 
         const tokenInfo = decodedToken.msg;
 
-        const {userName} = tokenInfo;
-
+        const {userName, userId} = tokenInfo;
+        console.log('assignNewBot', userName, userId);
 
         // assign bot uuid
         const botId = uuidv4();
@@ -278,8 +278,8 @@ const assignNewBot = (req, res) => {
 
         // set bot info in bots table
 
-        let q = `INSERT INTO bots (user_name, bot_id, bot_name, websites, server_series) VALUES 
-        ('${userName}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, ${serverSeries})`;
+        let q = `INSERT INTO bots (user_id, bot_id, bot_name, websites, server_series) VALUES 
+        ('${userId}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, ${serverSeries})`;
 
         try {
             await mysql.query(configPool, q);
@@ -293,7 +293,7 @@ const assignNewBot = (req, res) => {
             userName, serverSeries, botId
         }, JWT_SECRET, {expiresIn: '1h'});
 
-        res.status(200).json({botToken, ingest});
+        res.status(200).json({botToken, serverSeries});
         return resolve('ok')
     })
 }
