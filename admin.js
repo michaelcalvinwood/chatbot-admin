@@ -124,9 +124,12 @@ const verifyEmailToken = (req, res) => {
         const passwordHash = await getPasswordHash(password);
         const userId = uuidv4();
         const oneMonth = luxon.DateTime.now().plus({months: 1}).toISODate();
+        const newToken = jwt.sign({
+            userName, userId, storageTokens: 1000000, queryTokens: 20, openAIKeys: []
+        }, JWT_SECRET, {expiresIn: '12h'});
 
-        const q = `INSERT INTO account (user_id, user_name, email, password, allowed_storage_tokens, allowed_query_tokens, storage_tokens, query_tokens, reset_date, expiration, status) VALUES
-        ('${userId}', '${userName}', '${email}', '${passwordHash}', ${1000000}, ${20}, ${1000000}, ${20}, '${oneMonth}', '${oneMonth}', '${JSON.stringify({status: 'verified'})}')`
+        const q = `INSERT INTO account (user_id, user_name, email, password, allowed_storage_tokens, allowed_query_tokens, storage_tokens, query_tokens, reset_date, expiration, token, status) VALUES
+        ('${userId}', '${userName}', '${email}', '${passwordHash}', ${1000000}, ${20}, ${1000000}, ${20}, '${oneMonth}', '${oneMonth}', '${newToken}', '${JSON.stringify({status: 'verified'})}')`
 
         let result = await mysql.query(configPool, q);
 
@@ -141,7 +144,7 @@ const updateToken = async (userName, token) => {
 }
 
 const getUserInfo = async (userName, password = '') => {
-    const q = `SELECT password, storage_tokens, query_tokens, token FROM account WHERE user_name = ${mysql.escape(userName)}`;
+    const q = `SELECT user_id, password, storage_tokens, query_tokens, token FROM account WHERE user_name = ${mysql.escape(userName)}`;
     return await mysql.query(configPool, q);
 }
 
@@ -168,6 +171,8 @@ const sendUserInfo = (userName, res, password) => {
         const storageTokens = result[0].storage_tokens;
         const queryTokens = result[0].query_tokens;
         const token = result[0].token;
+        const userId = result[0].user_id;
+
         const tokenInfo = extractToken(token);
 
         console.log('extracting token', token);
@@ -182,7 +187,7 @@ const sendUserInfo = (userName, res, password) => {
         const hasKey = tokenInfo.msg.openAIKeys.length ? true : false;
 
         const newToken = jwt.sign({
-            userName, storageTokens, queryTokens, openAIKeys: tokenInfo.msg.openAIKeys
+            userName, userId, storageTokens, queryTokens, openAIKeys: tokenInfo.msg.openAIKeys
         }, JWT_SECRET, {expiresIn: '12h'});
         
         res.status(200).json({userName, storageTokens, queryTokens, hasKey, token: newToken});
