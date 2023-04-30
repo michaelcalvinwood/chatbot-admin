@@ -293,7 +293,7 @@ const assignNewBot = (req, res) => {
             userName, serverSeries, botId
         }, JWT_SECRET, {expiresIn: '1h'});
 
-        res.status(200).json({botToken, serverSeries});
+        res.status(200).json({botToken, serverSeries, botId});
         return resolve('ok')
     })
 }
