@@ -247,9 +247,9 @@ const setKey = (req, res) => {
 const assignNewBot = (req, res) => {
     return new Promise (async (resolve, reject) => {
 
-        const { token, botName, websites } = req.body;
+        const { token, botName, websites, openAIKeys } = req.body;
 
-        if (!token || !botName || !websites) {
+        if (!token || !botName || !websites || !openAIKeys || !openAIKeys.length) {
             res.status(400).json('bad request');
             return resolve('error 400');
         }
@@ -290,7 +290,7 @@ const assignNewBot = (req, res) => {
 
 
         const botToken = jwt.sign({
-            userName, serverSeries, botId
+            userName, serverSeries, botId, openAIKeys
         }, JWT_SECRET, {expiresIn: '1h'});
 
         res.status(200).json({botToken, serverSeries, botId});
