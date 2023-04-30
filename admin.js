@@ -14,6 +14,8 @@ const luxon = require('luxon');
 
 const smtp = require('./utils/smtpCom');
 const mysql = require('./utils/mysql');
+const qdrant = require('./utils/qdrant');
+
 const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require('uuid');
 
@@ -246,10 +248,10 @@ const setKey = (req, res) => {
 
 const assignNewBot = (req, res) => {
     return new Promise (async (resolve, reject) => {
+        console.log('assignNewBot', req.body);
+        const { token, botName, websites } = req.body;
 
-        const { token, botName, websites, openAIKeys } = req.body;
-
-        if (!token || !botName || !websites || !openAIKeys || !openAIKeys.length) {
+        if (!token || !botName || !websites) {
             res.status(400).json('bad request');
             return resolve('error 400');
         }
@@ -262,9 +264,12 @@ const assignNewBot = (req, res) => {
         }
 
         const tokenInfo = decodedToken.msg;
+        console.log('tokenInfo', tokenInfo);
 
-        const {userName, userId} = tokenInfo;
+        const {userName, userId, openAIKeys} = tokenInfo;
         console.log('assignNewBot', userName, userId);
+
+        let response;
 
         // assign bot uuid
         const botId = uuidv4();
@@ -275,11 +280,15 @@ const assignNewBot = (req, res) => {
          */
 
         const serverSeries = 1;
-
+ 
         // set bot info in bots table
 
-        let q = `INSERT INTO bots (user_id, bot_id, bot_name, websites, server_series) VALUES 
-        ('${userId}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, ${serverSeries})`;
+        const dbToken = jwt.sign({
+            botId, openAIKey: openAIKeys[0], domains: websites, serverSeries
+        }, JWT_SECRET);
+
+        let q = `INSERT INTO bots (user_id, bot_id, bot_name, websites, server_series, token) VALUES 
+        ('${userId}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, ${serverSeries}), '${dbToken}'`;
 
         try {
             await mysql.query(configPool, q);
@@ -288,6 +297,44 @@ const assignNewBot = (req, res) => {
             return resolve('error 500');
         }
 
+        // Create qdrant collection for the bot
+
+        const qdrantHost = `qdrant-${serverSeries}.instantchatbot.net`;
+        try {
+            await qdrant.createOpenAICollection(botId, qdrantHost, 6333, true);
+        } catch (err) {
+            if (err.response && err.response.data) console.log(err.response.data)
+            else console.error(err);
+            q = `DELETE FROM bots WHERE bot_id = '${botId}'`;
+            try {
+                await mysql.query(configPool, q);
+            } catch (err) {
+
+            }
+            res.status(500).json('Server Error: Unable to generate qdrant collection for bot.');
+            return resolve('error 500');
+        }
+
+        // generate the js and css on the home server
+
+        request = {
+            url: 'http://instantchatbot.net:6202/addBot',
+            method: 'post',
+            data: {
+                secretKey: process.env.SECRET_KEY,
+                botToken: dbToken,
+                serverSeries,
+                botId
+            }
+        }
+
+        try {
+            response = await axios(request);
+        } catch(err) {
+            console.error(err);
+            res.status(500).json('Server Error: Could not setup bot js and css.');
+            return resolve('error 500');
+        }
 
         const botToken = jwt.sign({
             userName, serverSeries, botId, openAIKeys
