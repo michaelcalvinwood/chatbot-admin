@@ -397,6 +397,25 @@ const listBots = (req, res) => {
     })
 }
 
+const deleteBot = (req, res) => {
+    return new Promise(async (resolve, request) => {
+        // remove bot collection from qdrant-n
+
+        // remove chunks from congig chunk
+
+        // remove content entries from config content
+
+        // remove docs from s3 storage
+
+        /*
+         * TODO: alter js and css on home?? 
+         */
+        
+        res.status(200).json('ok');
+        resolve('ok');
+    })
+}
+
 app.use(express.static('public'));
 app.use(express.json({limit: '200mb'})); 
 app.use(cors());
@@ -411,6 +430,7 @@ app.post('/login', (req, res) => handleLogin(req, res));
 app.post('/key', (req, res) => setKey(req, res));
 app.post('/newBot', (req, res) => assignNewBot(req, res));
 app.post('/listBots', (req, res) => listBots(req, res));
+app.post('/deleteBot', (req, res) => deleteBot(req, res));
 
 const httpsServer = https.createServer({
     key: fs.readFileSync(privateKeyPath),
