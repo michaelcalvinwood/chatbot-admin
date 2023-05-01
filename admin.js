@@ -10,6 +10,7 @@ const cors = require('cors');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const app = express();
+const axios = require('axios');
 const luxon = require('luxon');
 
 const smtp = require('./utils/smtpCom');
@@ -283,12 +284,17 @@ const assignNewBot = (req, res) => {
  
         // set bot info in bots table
 
+        let domains = websites.replaceAll(',', "\n");
+        domains = domains.split("\n");
+        domains = domains.map(domain => domain.trim());
+        console.log('domains', domains);
+
         const dbToken = jwt.sign({
-            botId, openAIKey: openAIKeys[0], domains: websites, serverSeries
+            botId, openAIKey: openAIKeys[0], domains, serverSeries
         }, JWT_SECRET);
 
         let q = `INSERT INTO bots (user_id, bot_id, bot_name, websites, server_series, token) VALUES 
-        ('${userId}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, ${serverSeries}), '${dbToken}'`;
+        ('${userId}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, ${serverSeries}, '${dbToken}')`;
 
         try {
             await mysql.query(configPool, q);
@@ -318,7 +324,7 @@ const assignNewBot = (req, res) => {
         // generate the js and css on the home server
 
         request = {
-            url: 'http://instantchatbot.net:6202/addBot',
+            url: 'https://instantchatbot.net:6202/addBot',
             method: 'post',
             data: {
                 secretKey: process.env.SECRET_KEY,
@@ -327,6 +333,8 @@ const assignNewBot = (req, res) => {
                 botId
             }
         }
+
+        console.log(request);
 
         try {
             response = await axios(request);
@@ -345,6 +353,50 @@ const assignNewBot = (req, res) => {
     })
 }
 
+const listBots = (req, res) => {
+    return new Promise(async (resolve, reject) => {
+        const { token } = req.body;
+
+        if (!token) {
+            res.status(400).json('bad request');
+            return resolve('error 400');
+        }
+
+        const tokenInfo = extractToken(token);
+        if (!tokenInfo.status) {
+            res.status(401).json('unauthorized');
+            return resolve('error 401');
+        }
+
+        const decodedToken = tokenInfo.msg;
+
+        const { userName, userId } = decodedToken;
+
+        let result;
+
+        try {
+            result = await mysql.query(configPool, `SELECT bot_id, bot_name, websites, server_series FROM bots WHERE user_id = '${userId}'`);
+        } catch (err) {
+            res.status(500).json('server error. unable to retrieve info regarding bots');
+            return resolve('error 500');
+        }
+
+        const bots = result.map(bot => {
+            return {
+                botId: bot.bot_id, 
+                botName: bot.bot_name, 
+                websites: bot.websites,
+                serverSeries: bot.server_series
+            }
+        })
+
+        console.log(bots);
+
+        res.status(200).json(bots);
+        resolve('ok');
+    })
+}
+
 app.use(express.static('public'));
 app.use(express.json({limit: '200mb'})); 
 app.use(cors());
@@ -358,6 +410,7 @@ app.post('/signup', (req, res) => sendVerificationEmail(req, res));
 app.post('/login', (req, res) => handleLogin(req, res));
 app.post('/key', (req, res) => setKey(req, res));
 app.post('/newBot', (req, res) => assignNewBot(req, res));
+app.post('/listBots', (req, res) => listBots(req, res));
 
 const httpsServer = https.createServer({
     key: fs.readFileSync(privateKeyPath),
