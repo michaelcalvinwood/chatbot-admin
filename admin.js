@@ -59,6 +59,22 @@ const userIdFromUserName = async userName => {
     }
 }
 
+const botBelongsToUserId = async (botId, userId) => {
+    const q = `SELECT user_id FROM bots WHERE bot_id = '${botId}'`;
+
+    let result;
+
+    try {
+        result = await mysql.query(configPool, q);
+        if (!result.length) return false;
+        if (result[0].user_id !== userId) return false;
+        return true;
+    } catch (err) {
+        console.error('botBelongsToUserId', err);
+        return false;
+    }
+}
+
 function extractToken(info, expiredCheck = false) {
     // if invalid return false
     try {
@@ -434,6 +450,10 @@ const deleteBot = (req, res) => {
         console.log('userId', userId);
 
         if (!userId) return error(401, 'unauthorized', resolve, res);
+
+        const validation = await botBelongsToUserId(botId, userId);
+
+        console.log('validation', validation);
 
         // confirm that botId belongs to userId
 
