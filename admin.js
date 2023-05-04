@@ -16,6 +16,7 @@ const luxon = require('luxon');
 const smtp = require('./utils/smtpCom');
 const mysql = require('./utils/mysql');
 const qdrant = require('./utils/qdrant');
+const jwtUtil = require('./utils/jwt');
 
 const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require('uuid');
@@ -42,6 +43,20 @@ const isValidUser = async (password, hash) =>
     }
     
     return res;
+}
+
+const userIdFromUserName = async userName => {
+    const q = `SELECT user_id FROM account WHERE user_name = ${mysql.escape(userName)}`;
+
+    let result;
+    try {
+        result = await mysql.query(configPool, q);
+        if (result.length) return result[0].user_id;
+        else return false;
+    } catch (err) {
+        console.error('userIdFromUserName', err);
+        return false;
+    }
 }
 
 function extractToken(info, expiredCheck = false) {
@@ -390,15 +405,40 @@ const listBots = (req, res) => {
             }
         })
 
-        console.log(bots);
+        //console.log(bots);
 
         res.status(200).json(bots);
         resolve('ok');
     })
 }
 
+function error (num, msg, resolve, res) {
+    res.status(num).json(msg);
+    resolve(msg);
+}
+
 const deleteBot = (req, res) => {
     return new Promise(async (resolve, request) => {
+        const { botId, userToken } = req.body;
+
+        if (!botId || !userToken) return error(400, 'bad request', resolve, res);
+
+        const token = jwtUtil.getToken(userToken);
+
+        console.log(token);
+
+        const { userName } = token;
+
+        const userId = await userIdFromUserName(userName);
+
+        console.log('userId', userId);
+
+        if (!userId) return error(401, 'unauthorized', resolve, res);
+
+        // confirm that botId belongs to userId
+
+        // get bot server series
+
         // remove bot collection from qdrant-n
 
         // remove chunks from congig chunk
