@@ -60,7 +60,7 @@ const userIdFromUserName = async userName => {
 }
 
 const botBelongsToUserId = async (botId, userId) => {
-    const q = `SELECT user_id FROM bots WHERE bot_id = '${botId}'`;
+    const q = `SELECT user_id, server_series FROM bots WHERE bot_id = '${botId}'`;
 
     let result;
 
@@ -68,7 +68,7 @@ const botBelongsToUserId = async (botId, userId) => {
         result = await mysql.query(configPool, q);
         if (!result.length) return false;
         if (result[0].user_id !== userId) return false;
-        return true;
+        return result[0].server_series;
     } catch (err) {
         console.error('botBelongsToUserId', err);
         return false;
@@ -451,13 +451,11 @@ const deleteBot = (req, res) => {
 
         if (!userId) return error(401, 'unauthorized', resolve, res);
 
-        const validation = await botBelongsToUserId(botId, userId);
+        const serverSeries = await botBelongsToUserId(botId, userId);
 
-        console.log('validation', validation);
+        console.log('server_series', serverSeries);
 
-        // confirm that botId belongs to userId
-
-        // get bot server series
+        if (serverSeries === false) return error(401, 'unauthorized 2', resolve, res);
 
         // remove bot collection from qdrant-n
 
