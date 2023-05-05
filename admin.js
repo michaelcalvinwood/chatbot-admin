@@ -17,6 +17,7 @@ const smtp = require('./utils/smtpCom');
 const mysql = require('./utils/mysql');
 const qdrant = require('./utils/qdrant');
 const jwtUtil = require('./utils/jwt');
+const s3 = require('./utils/s3');
 
 const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require('uuid');
@@ -457,13 +458,41 @@ const deleteBot = (req, res) => {
 
         if (serverSeries === false) return error(401, 'unauthorized 2', resolve, res);
 
-        // remove bot collection from qdrant-n
+        const qdrantHost = `qdrant-${serverSeries}.instantchatbot.net`;
+        const chunksHost = `chunks-${serverSeries}.instantchatbot.net`;
 
-        // remove chunks from congig chunk
+        let result = await qdrant.deleteCollection(qdrantHost, 6333, botId);
+        console.log('qdrant result', result.data);
+        
+        const { CHUNKS_MYSQL_USER, CHUNKS_MYSQL_PASSWORD} = process.env;
 
-        // remove content entries from config content
+        console.log('mysql credentials', CHUNKS_MYSQL_USER, CHUNKS_MYSQL_PASSWORD);
 
-        // remove docs from s3 storage
+        const chunkDb = mysql.pool(chunksHost, 'chunks', CHUNKS_MYSQL_USER, CHUNKS_MYSQL_PASSWORD, 1);
+
+        let q = `SELECT content_id FROM content WHERE bot_id = '${botId}'`;
+        let contentIds = await mysql.query(chunkDb, q);
+        console.log('contentIds', contentIds);
+        
+        for (let i = 0; i < contentIds.length; ++i) {
+            let contentId = contentIds[i].content_id;
+            q = `DELETE FROM chunk WHERE content_id = '${contentId}'`;
+            result = await mysql.query(chunkDb, q);
+            console.log(`Delete chunks for contentId ${contentId}: `, result);
+        }
+
+        q = `DELETE FROM content WHERE bot_id = '${botId}'`;
+        result = await mysql.query(chunkDb, q);
+        chunkDb.end();
+
+        console.log(`Delete content for bot ${botId}`, result);
+
+        const {S3_ENDPOINT, S3_ENDPOINT_DOMAIN, S3_REGION, S3_KEY, S3_SECRET, S3_BUCKET} = process.env;
+
+        const s3Client = s3.client(S3_ENDPOINT, S3_ENDPOINT_DOMAIN, S3_REGION, S3_KEY, S3_SECRET, S3_BUCKET)
+
+        
+        result = await s3.emptyS3Directory(botId, s3Client);
 
         /*
          * TODO: alter js and css on home?? 
