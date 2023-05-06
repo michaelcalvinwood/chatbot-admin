@@ -18,6 +18,7 @@ const mysql = require('./utils/mysql');
 const qdrant = require('./utils/qdrant');
 const jwtUtil = require('./utils/jwt');
 const s3 = require('./utils/s3');
+const routes = require('./routes');
 
 const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require('uuid');
@@ -97,48 +98,6 @@ function extractToken(info, expiredCheck = false) {
     }
 
     return {status: true, msg: token};
-}
-
-const sendVerificationEmail = (req, res) => {
-    return new Promise(async (resolve, reject) => {
-  
-    const { email, userName, password } = req.body;
-
-    if (!email || !userName || !password) {
-        res.status(400).json('bad request');
-        return resolve('error 001');
-    } 
-
-    console.log(userName, email, password);
-
-    /*
-     * TODO: Add server-side validation of email, password, and username
-     */
-
-
-    let emailTemplate = fs.readFileSync('./email.html', 'utf-8');
-    let token = jwt.sign({
-        email, userName, password
-    }, JWT_SECRET, {expiresIn: '3h'});
-
-    let verificationEmail = emailTemplate.replaceAll('TOKEN_URL', `https://admin.instantchatbot.net:6200/verify?t=${token}`);
-
-    let result;
-    
-    try {
-        result = await smtp.sendEmail(email, 'noreply@instantchatbot.net', 'Verify Email Address', verificationEmail, "Instant Chatbot");
-    } catch (err) {
-        res.status(400).json('Unable to send verification email');
-        return resolve('error 002');
-    }
-
-    res.status(200).json('ok');
-
-    resolve('ok');
-
-    return;
-
-    })
 }
 
 const verifyEmailToken = (req, res) => {
@@ -607,7 +566,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/verify', (req, res) => verifyEmailToken(req, res));
-app.post('/signup', (req, res) => sendVerificationEmail(req, res));
+app.post('/signup', (req, res) => routes.sendVerificationEmail(req, res));
 app.post('/login', (req, res) => handleLogin(req, res));
 app.post('/key', (req, res) => setKey(req, res));
 app.post('/newBot', (req, res) => assignNewBot(req, res));
