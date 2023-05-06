@@ -97,3 +97,59 @@ exports.verifyEmailToken = (req, res) => {
         return resolve('ok');
     })
 }
+const isValidUser = async (password, hash) => 
+{
+    let res;
+    try {
+       res = await bcrypt.compare(password, hash);
+    } catch (err) {
+        return false;
+    }
+    
+    return res;
+}
+
+const getUserInfo = async (userName, password = '') => {
+    const q = `SELECT user_id, password, token FROM account WHERE user_name = ${mysql.escape(userName)}`;
+    return await mysql.query(configPool, q);
+}
+
+const sendUserInfo = async (userName, res, password) => {
+        const result = await getUserInfo(userName);
+
+        if (!result.length) return res.status(401).json('unauthorized');
+
+        const hash = result[0].password;
+    
+        const test = await isValidUser(password, hash);
+    
+        if (!test) return res.status(401).json('unauthorized');
+            
+        const token = result[0].token;
+        const userId = result[0].user_id;
+
+        const tokenInfo = exports.extractToken(token);
+
+        console.log('extracting token', token);
+
+        if (!tokenInfo.status) return res.status(500).json('cannot decode token');
+           
+        console.log('token info', tokenInfo);
+
+        const hasKey = tokenInfo.msg.openAIKeys.length ? true : false;
+
+        const newToken = jwt.sign({
+            userName, userId, openAIKeys: tokenInfo.msg.openAIKeys
+        }, JWT_SECRET, {expiresIn: '12h'});
+        
+        res.status(200).json({userId, userName, hasKey, token: newToken});
+        return
+}
+
+exports.handleLogin = async (req, res) => {
+        const { userName, password } = req.body;
+        if (!userName || !password) return res.status(400).json('bad request');
+            
+        sendUserInfo(userName, res, password);
+    
+}

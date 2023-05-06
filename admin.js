@@ -34,17 +34,6 @@ const configPool = mysql.pool(CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_M
 
 
 
-const isValidUser = async (password, hash) => 
-{
-    let res;
-    try {
-       res = await bcrypt.compare(password, hash);
-    } catch (err) {
-        return false;
-    }
-    
-    return res;
-}
 
 const userIdFromUserName = async userName => {
     const q = `SELECT user_id FROM account WHERE user_name = ${mysql.escape(userName)}`;
@@ -80,75 +69,6 @@ const botBelongsToUserId = async (botId, userId) => {
 const updateToken = async (userName, token) => {
     const q = `UPDATE account SET token = '${token}' WHERE user_name = '${userName}'`;
     return await mysql.query(configPool, q);
-}
-
-const getUserInfo = async (userName, password = '') => {
-    const q = `SELECT user_id, password, storage_tokens, query_tokens, token FROM account WHERE user_name = ${mysql.escape(userName)}`;
-    return await mysql.query(configPool, q);
-}
-
-const sendUserInfo = (userName, res, password) => {
-    return new Promise (async (resolve, reject) => {
-
-        const result = await getUserInfo(userName);
-
-        if (!result.length) {
-            res.status(401).json('unauthorized');
-            return resolve('error 401');
-        }
-
-        const hash = result[0].password;
-    
-        const test = await isValidUser(password, hash);
-    
-        if (!test) {     
-            res.status(401).json('unauthorized');
-            return resolve('error 402');
-        }
-        
-    
-        const storageTokens = result[0].storage_tokens;
-        const queryTokens = result[0].query_tokens;
-        const token = result[0].token;
-        const userId = result[0].user_id;
-
-        const tokenInfo = routes.extractToken(token);
-
-        console.log('extracting token', token);
-
-        if (!tokenInfo.status) {
-            res.status(500).json('cannot decode token');
-            return resolve('error 500');
-        }
-
-        console.log('token info', tokenInfo);
-
-        const hasKey = tokenInfo.msg.openAIKeys.length ? true : false;
-
-        const newToken = jwt.sign({
-            userName, userId, storageTokens, queryTokens, openAIKeys: tokenInfo.msg.openAIKeys
-        }, JWT_SECRET, {expiresIn: '12h'});
-        
-        res.status(200).json({userId, userName, storageTokens, queryTokens, hasKey, token: newToken});
-
-        resolve ('ok');
-        return
-    })
-}
-
-const handleLogin = (req, res) => {
-    return new Promise(async (resolve, reject) => {
-        const { userName, password } = req.body;
-
-        if (!userName || !password) {
-            res.status(400).json('bad request');
-            resolve('error 001');
-            return;
-        }
-
-        sendUserInfo(userName, res, password);
-       
-    })
 }
 
 const setKey = (req, res) => {
@@ -508,7 +428,7 @@ app.get('/', (req, res) => {
 
 app.get('/verify', (req, res) => routes.verifyEmailToken(req, res));
 app.post('/signup', (req, res) => routes.sendVerificationEmail(req, res));
-app.post('/login', (req, res) => handleLogin(req, res));
+app.post('/login', (req, res) => routes.handleLogin(req, res));
 app.post('/key', (req, res) => setKey(req, res));
 app.post('/newBot', (req, res) => assignNewBot(req, res));
 app.post('/listBots', (req, res) => listBots(req, res));
