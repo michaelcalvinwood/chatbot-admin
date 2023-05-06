@@ -11,9 +11,7 @@ const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const app = express();
 const axios = require('axios');
-const luxon = require('luxon');
 
-const smtp = require('./utils/smtpCom');
 const mysql = require('./utils/mysql');
 const qdrant = require('./utils/qdrant');
 const jwtUtil = require('./utils/jwt');
@@ -25,9 +23,6 @@ const { v4: uuidv4 } = require('uuid');
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-
-
-
 const { JWT_SECRET, CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER, CONFIG_MYSQL_PASSWORD } = process.env;
 
 // app.use((req, res, next) => {
@@ -37,7 +32,7 @@ const { JWT_SECRET, CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER,
 
 const configPool = mysql.pool(CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER, CONFIG_MYSQL_PASSWORD);
 
-const getPasswordHash = (password, saltRounds = 10) => bcrypt.hash(password, saltRounds);
+
 
 const isValidUser = async (password, hash) => 
 {
@@ -81,60 +76,6 @@ const botBelongsToUserId = async (botId, userId) => {
     }
 }
 
-function extractToken(info, expiredCheck = false) {
-    // if invalid return false
-    try {
-        if (!jwt.verify(info, JWT_SECRET)) return {status: false, msg: 'invalid token'};
-    } catch (err) {
-        if (err.name && err.name === 'TokenExpiredError' && expiredCheck === false) return ({status:true, msg: jwt.decode(info)}) 
-        console.error(JSON.stringify(err));
-        return {status: false, msg: 'invalid token'}
-    }
-    const token = jwt.decode(info);
-
-    if (expiredCheck) {
-        const curTime = new Date();
-        if (token.exp < curTime.getTime()/1000) return {status: false, msg: 'token has expired'};
-    }
-
-    return {status: true, msg: token};
-}
-
-const verifyEmailToken = (req, res) => {
-    return new Promise(async (resolve, reject) => {
-        if (!req.query || !req.query.t) {
-            res.status(400).json('bad request');
-            return resolve('error 001');
-        }
-        const token = extractToken(req.query.t);
-    
-        if (!token.status) {
-            res.status(400).json(token.msg);
-            return resolve ('error 002');
-        } 
-    
-        const info = token.msg;
-
-        const { email, userName, password } = info;
-
-        console.log(info);
-
-        const passwordHash = await getPasswordHash(password);
-        const userId = uuidv4();
-        const oneMonth = luxon.DateTime.now().plus({months: 1}).toISODate();
-        const newToken = jwt.sign({
-            userName, userId, storageTokens: 1000000, queryTokens: 20, openAIKeys: []
-        }, JWT_SECRET, {expiresIn: '12h'});
-
-        const q = `INSERT INTO account (user_id, user_name, email, password, allowed_storage_tokens, allowed_query_tokens, storage_tokens, query_tokens, reset_date, expiration, token, status) VALUES
-        ('${userId}', '${userName}', '${email}', '${passwordHash}', ${1000000}, ${20}, ${1000000}, ${20}, '${oneMonth}', '${oneMonth}', '${newToken}', '${JSON.stringify({status: 'verified'})}')`
-
-        let result = await mysql.query(configPool, q);
-
-        res.redirect('https://instantchatbot.net/login')
-        return resolve('ok');
-    })
-}
 
 const updateToken = async (userName, token) => {
     const q = `UPDATE account SET token = '${token}' WHERE user_name = '${userName}'`;
@@ -171,7 +112,7 @@ const sendUserInfo = (userName, res, password) => {
         const token = result[0].token;
         const userId = result[0].user_id;
 
-        const tokenInfo = extractToken(token);
+        const tokenInfo = routes.extractToken(token);
 
         console.log('extracting token', token);
 
@@ -219,7 +160,7 @@ const setKey = (req, res) => {
             return resolve('Error 001');
         } 
 
-        tokenInfo = extractToken(token);
+        tokenInfo = routes.extractToken(token);
         const { userName } = tokenInfo.msg;
 
         console.log('token', userName, tokenInfo, key);
@@ -252,7 +193,7 @@ const assignNewBot = (req, res) => {
             return resolve('error 400');
         }
 
-        const decodedToken = extractToken(token, true);
+        const decodedToken = routes.extractToken(token, true);
 
         if (!decodedToken.status) {
             res.status(401).json(decodedToken.msg);
@@ -357,7 +298,7 @@ const listBots = (req, res) => {
             return resolve('error 400');
         }
 
-        const tokenInfo = extractToken(token);
+        const tokenInfo = routes.extractToken(token);
         if (!tokenInfo.status) {
             res.status(401).json('unauthorized');
             return resolve('error 401');
@@ -565,7 +506,7 @@ app.get('/', (req, res) => {
     res.send('Hello, World!');
 });
 
-app.get('/verify', (req, res) => verifyEmailToken(req, res));
+app.get('/verify', (req, res) => routes.verifyEmailToken(req, res));
 app.post('/signup', (req, res) => routes.sendVerificationEmail(req, res));
 app.post('/login', (req, res) => handleLogin(req, res));
 app.post('/key', (req, res) => setKey(req, res));
@@ -575,10 +516,6 @@ app.post('/deleteBot', (req, res) => deleteBot(req, res));
 app.post('/deleteAccount', (req, res) => deleteAccount(req, res));
 app.post('/purchaseCredits', (req, res) => purchaseCredits (req,res));
 
-const storeItems = new Map([
-    [1, {priceInCents: 10000, name: 'Yoyo'}],
-    [2, {priceInCents: 20000, name: 'Gogo'}]
-])
 
 const httpsServer = https.createServer({
     key: fs.readFileSync(privateKeyPath),
