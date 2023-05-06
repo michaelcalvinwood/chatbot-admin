@@ -76,7 +76,7 @@ exports.emptyS3Directory = async (dir, s3Client) => {
 
 
     return true;
-  }
+}
 
 
 exports.getPostSignedUrl = async (s3Client, folder, Expires = 3600) => {

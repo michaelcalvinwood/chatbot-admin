@@ -434,31 +434,8 @@ function error (num, msg, resolve, res) {
     resolve(msg);
 }
 
-const deleteBot = (req, res) => {
-    return new Promise(async (resolve, request) => {
-        const { botId, userToken } = req.body;
-
-        if (!botId || !userToken) return error(400, 'bad request', resolve, res);
-
-        const token = jwtUtil.getToken(userToken);
-
-        console.log(token);
-
-        const { userName } = token;
-
-        const userId = await userIdFromUserName(userName);
-
-        console.log('userId', userId);
-
-        if (!userId) return error(401, 'unauthorized', resolve, res);
-
-        const serverSeries = await botBelongsToUserId(botId, userId);
-
-        console.log('server_series', serverSeries);
-
-        if (serverSeries === false) return error(401, 'unauthorized 2', resolve, res);
-
-        const qdrantHost = `qdrant-${serverSeries}.instantchatbot.net`;
+const deleteBotId = async (botId, serverSeries) => {
+    const qdrantHost = `qdrant-${serverSeries}.instantchatbot.net`;
         const chunksHost = `chunks-${serverSeries}.instantchatbot.net`;
 
         let result = await qdrant.deleteCollection(qdrantHost, 6333, botId);
@@ -491,13 +468,88 @@ const deleteBot = (req, res) => {
 
         const s3Client = s3.client(S3_ENDPOINT, S3_ENDPOINT_DOMAIN, S3_REGION, S3_KEY, S3_SECRET, S3_BUCKET)
 
-        
         result = await s3.emptyS3Directory(botId, s3Client);
 
-        /*
+        q = `DELETE FROM bots WHERE bot_id = '${botId}'`;
+        await mysql.query(configPool, q);
+        
+
+}
+
+const deleteBot = (req, res) => {
+    return new Promise(async (resolve, request) => {
+        const { botId, userToken } = req.body;
+
+        if (!botId || !userToken) return error(400, 'bad request', resolve, res);
+
+        const token = jwtUtil.getToken(userToken);
+
+        console.log(token);
+
+        const { userName } = token;
+
+        const userId = await userIdFromUserName(userName);
+
+        console.log('userId', userId);
+
+        if (!userId) return error(401, 'unauthorized', resolve, res);
+
+        const serverSeries = await botBelongsToUserId(botId, userId);
+
+        console.log('server_series', serverSeries);
+
+        if (serverSeries === false) return error(401, 'unauthorized 2', resolve, res);
+
+        await deleteBotId(botId, serverSeries);
+
+                /*
          * TODO: alter js and css on home?? 
          */
         
+        res.status(200).json('ok');
+        resolve('ok');
+    })
+}
+
+const deleteAccount = (req, res) => {
+    return new Promise(async(resolve, reject) => {
+        const { userToken } = req.body;
+    
+        if (!userToken) return error(400, 'bad request', resolve, res);
+
+        const token = jwtUtil.getToken(userToken);
+
+        console.log(token);
+
+        const { userName } = token;
+
+        const userId = await userIdFromUserName(userName);
+
+        console.log('userId', userId);
+
+        if (!userId) return error(401, 'unauthorized', resolve, res);
+
+        // get all botIds
+
+        let q = `SELECT bot_id FROM bots WHERE user_id = '${userId}'`;
+        let result = await mysql.query(configPool, q);
+
+        console.log(result);
+
+        for (let i = 0; i < result.length; ++i) {
+            const botId = result[i].bot_id;
+            const serverSeries = await botBelongsToUserId(botId, userId);
+
+            console.log('server_series', serverSeries);
+
+            if (serverSeries === false) continue;
+
+            await deleteBotId(botId, serverSeries)
+        }
+
+        q = `DELETE FROM account WHERE user_id = '${userId}'`;
+        result = await mysql.query(configPool, q);
+
         res.status(200).json('ok');
         resolve('ok');
     })
@@ -518,6 +570,7 @@ app.post('/key', (req, res) => setKey(req, res));
 app.post('/newBot', (req, res) => assignNewBot(req, res));
 app.post('/listBots', (req, res) => listBots(req, res));
 app.post('/deleteBot', (req, res) => deleteBot(req, res));
+app.post('/deleteAccount', (req, res) => deleteAccount(req, res));
 
 const httpsServer = https.createServer({
     key: fs.readFileSync(privateKeyPath),
