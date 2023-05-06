@@ -22,6 +22,10 @@ const s3 = require('./utils/s3');
 const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require('uuid');
 
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+
+
 
 const { JWT_SECRET, CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER, CONFIG_MYSQL_PASSWORD } = process.env;
 
@@ -555,6 +559,45 @@ const deleteAccount = (req, res) => {
     })
 }
 
+const purchaseCredits = async (req, res) => {
+    url = '/home';
+
+    let { userToken, quantity } = req.body;
+
+    if (!userToken || !quantity) return res.status(400).json('bad request');
+
+    if (isNaN(quantity)) return res.status(400).json('bad request 2');
+
+    quantity = Math.trunc(Number(quantity));
+
+    console.log ('quantity', quantity);
+
+    const session = await stripe.checkout.sessions.create({
+        payment_method_types: [
+            'card'
+        ],
+        mode: 'payment', // 'subscription' would be for recurring charges,
+        success_url: `https://instantchatbot.net/purchase?type=success&qty=${quantity}`,
+        cancel_url: 'https://instantchatbot.net/purchase?type=cancel',
+        line_items: [
+            {
+                price_data: {
+                    currency: 'usd',
+                    product_data: {
+                        name: 'Instant Chatbot Credit',
+                    },
+                    unit_amount: 2000
+                },
+                quantity
+            }
+        ]
+    })
+
+    res.status(200).send(session.url);
+   
+    
+}
+
 app.use(express.static('public'));
 app.use(express.json({limit: '200mb'})); 
 app.use(cors());
@@ -571,6 +614,12 @@ app.post('/newBot', (req, res) => assignNewBot(req, res));
 app.post('/listBots', (req, res) => listBots(req, res));
 app.post('/deleteBot', (req, res) => deleteBot(req, res));
 app.post('/deleteAccount', (req, res) => deleteAccount(req, res));
+app.post('/purchaseCredits', (req, res) => purchaseCredits (req,res));
+
+const storeItems = new Map([
+    [1, {priceInCents: 10000, name: 'Yoyo'}],
+    [2, {priceInCents: 20000, name: 'Gogo'}]
+])
 
 const httpsServer = https.createServer({
     key: fs.readFileSync(privateKeyPath),
