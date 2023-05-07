@@ -32,9 +32,6 @@ const { JWT_SECRET, CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER,
 
 const configPool = mysql.pool(CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER, CONFIG_MYSQL_PASSWORD);
 
-
-
-
 const userIdFromUserName = async userName => {
     const q = `SELECT user_id FROM account WHERE user_name = ${mysql.escape(userName)}`;
 
@@ -63,150 +60,6 @@ const botBelongsToUserId = async (botId, userId) => {
         console.error('botBelongsToUserId', err);
         return false;
     }
-}
-
-
-const updateToken = async (userName, token) => {
-    const q = `UPDATE account SET token = '${token}' WHERE user_name = '${userName}'`;
-    return await mysql.query(configPool, q);
-}
-
-const setKey = (req, res) => {
-    return new Promise(async (resolve, reject) => {
-        const { token, key } = req.body;
-
-        if (!token || !key) {
-            res.status(400).json('bad request');
-            return resolve('Error 001');
-        } 
-
-        tokenInfo = routes.extractToken(token);
-        const { userName } = tokenInfo.msg;
-
-        console.log('token', userName, tokenInfo, key);
-
-        const result = await getUserInfo(userName);
-
-        const storageTokens = result[0].storage_tokens;
-        const queryTokens = result[0].query_tokens;    
-        const hasKey = true;
-
-        const newToken = jwt.sign({
-            userName, storageTokens, queryTokens, openAIKeys: [key]
-        }, JWT_SECRET, {expiresIn: '12h'});
-
-        await updateToken(userName, newToken);
-
-        res.status(200).json({userName, storageTokens, queryTokens, hasKey, token: newToken});
-
-        return resolve('ok');
-    })
-}
-
-const assignNewBot = (req, res) => {
-    return new Promise (async (resolve, reject) => {
-        console.log('assignNewBot', req.body);
-        const { token, botName, websites } = req.body;
-
-        if (!token || !botName || !websites) {
-            res.status(400).json('bad request');
-            return resolve('error 400');
-        }
-
-        const decodedToken = routes.extractToken(token, true);
-
-        if (!decodedToken.status) {
-            res.status(401).json(decodedToken.msg);
-            return resolve('error 401')
-        }
-
-        const tokenInfo = decodedToken.msg;
-        console.log('tokenInfo', tokenInfo);
-
-        const {userName, userId, openAIKeys} = tokenInfo;
-        console.log('assignNewBot', userName, userId);
-
-        let response;
-
-        // assign bot uuid
-        const botId = uuidv4();
-
-        // get ingest, qdrant, and app servers
-        /*
-         * TODO: dynamically get names of these servers
-         */
-
-        const serverSeries = 1;
- 
-        // set bot info in bots table
-
-        let domains = websites.replaceAll(',', "\n");
-        domains = domains.split("\n");
-        domains = domains.map(domain => domain.trim());
-        console.log('domains', domains);
-
-        const dbToken = jwt.sign({
-            botId, openAIKey: openAIKeys[0], domains, serverSeries
-        }, JWT_SECRET);
-
-        let q = `INSERT INTO bots (user_id, bot_id, bot_name, websites, server_series, token) VALUES 
-        ('${userId}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, ${serverSeries}, '${dbToken}')`;
-
-        try {
-            await mysql.query(configPool, q);
-        } catch (err) {
-            res.status(500).json('Server Error: Could not insert bot info into database. Please try again later');
-            return resolve('error 500');
-        }
-
-        // Create qdrant collection for the bot
-
-        const qdrantHost = `qdrant-${serverSeries}.instantchatbot.net`;
-        try {
-            await qdrant.createOpenAICollection(botId, qdrantHost, 6333, true);
-        } catch (err) {
-            if (err.response && err.response.data) console.log(err.response.data)
-            else console.error(err);
-            q = `DELETE FROM bots WHERE bot_id = '${botId}'`;
-            try {
-                await mysql.query(configPool, q);
-            } catch (err) {
-
-            }
-            res.status(500).json('Server Error: Unable to generate qdrant collection for bot.');
-            return resolve('error 500');
-        }
-
-        // generate the js and css on the home server
-
-        request = {
-            url: 'https://instantchatbot.net:6202/addBot',
-            method: 'post',
-            data: {
-                secretKey: process.env.SECRET_KEY,
-                botToken: dbToken,
-                serverSeries,
-                botId
-            }
-        }
-
-        console.log(request);
-
-        try {
-            response = await axios(request);
-        } catch(err) {
-            console.error(err);
-            res.status(500).json('Server Error: Could not setup bot js and css.');
-            return resolve('error 500');
-        }
-
-        const botToken = jwt.sign({
-            userName, serverSeries, botId, openAIKeys
-        }, JWT_SECRET, {expiresIn: '1h'});
-
-        res.status(200).json({botToken, serverSeries, botId});
-        return resolve('ok')
-    })
 }
 
 const listBots = (req, res) => {
@@ -429,8 +282,8 @@ app.get('/', (req, res) => {
 app.get('/verify', (req, res) => routes.verifyEmailToken(req, res));
 app.post('/signup', (req, res) => routes.sendVerificationEmail(req, res));
 app.post('/login', (req, res) => routes.handleLogin(req, res));
-app.post('/key', (req, res) => setKey(req, res));
-app.post('/newBot', (req, res) => assignNewBot(req, res));
+app.post('/setKey', (req, res) => routes.setKey(req, res));
+app.post('/newBot', (req, res) => routes.assignNewBot(req, res));
 app.post('/listBots', (req, res) => listBots(req, res));
 app.post('/deleteBot', (req, res) => deleteBot(req, res));
 app.post('/deleteAccount', (req, res) => deleteAccount(req, res));
