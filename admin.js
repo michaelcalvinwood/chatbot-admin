@@ -22,6 +22,7 @@ const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require('uuid');
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const pendingPurchases = {};
 
 const { JWT_SECRET, CONFIG_MYSQL_HOST, CONFIG_MYSQL_DATABASE, CONFIG_MYSQL_USER, CONFIG_MYSQL_PASSWORD } = process.env;
 
@@ -149,8 +150,6 @@ const deleteBotId = async (botId, serverSeries) => {
 
         q = `DELETE FROM bots WHERE bot_id = '${botId}'`;
         await mysql.query(configPool, q);
-        
-
 }
 
 const deleteBot = (req, res) => {
@@ -235,11 +234,23 @@ const deleteAccount = (req, res) => {
 const purchaseCredits = async (req, res) => {
     url = '/home';
 
-    let { userToken, quantity } = req.body;
+    console.log('req.body', req.body);
 
-    if (!userToken || !quantity) return res.status(400).json('bad request');
+    let { userToken, quantity, cost, discount} = req.body;
+
+    if (!userToken || !quantity || !cost || typeof discount === 'undefined') return res.status(400).json('bad request');
+
+    const token = jwtUtil.getToken(userToken);
+
+    console.log('token', token);
+
+    const { userId, userName, email } = token;
 
     if (isNaN(quantity)) return res.status(400).json('bad request 2');
+    if (isNaN(cost)) return res.status(400).json('bad request 3');
+
+    if (pendingPurchases[userId]) return res.status(400).json('bad request: already pending purchase');
+    else pendingPurchases[userId] = res;
 
     quantity = Math.trunc(Number(quantity));
 
@@ -250,18 +261,18 @@ const purchaseCredits = async (req, res) => {
             'card'
         ],
         mode: 'payment', // 'subscription' would be for recurring charges,
-        success_url: `https://instantchatbot.net/purchase?type=success&qty=${quantity}`,
-        cancel_url: 'https://instantchatbot.net/purchase?type=cancel',
+        success_url: `https://admin.instantchatbot.net:6200/successfulPurchase?qty=${quantity}&userId=${userId}`,
+        cancel_url: `https://admin.instantchatbot.net:6200/failedPurchase?userId=${userId}`,
         line_items: [
             {
                 price_data: {
                     currency: 'usd',
                     product_data: {
-                        name: 'Instant Chatbot Credit',
+                        name: `Instant Chatbot Credit: ${quantity} Tokens`,
                     },
-                    unit_amount: 2000
+                    unit_amount: cost
                 },
-                quantity
+                quantity: 1
             }
         ]
     })
@@ -269,6 +280,11 @@ const purchaseCredits = async (req, res) => {
     res.status(200).send(session.url);
    
     
+}
+
+const handleSuccessfulPurchase = async (req, res) => {
+    console.log('handleSuccessfulPurchase', req.query, pendingPurchases);
+
 }
 
 app.use(express.static('public'));
@@ -289,6 +305,8 @@ app.post('/deleteBot', (req, res) => deleteBot(req, res));
 app.post('/deleteAccount', (req, res) => deleteAccount(req, res));
 app.post('/purchaseCredits', (req, res) => purchaseCredits (req,res));
 
+app.get('/successfulPurchase', (req, res) => handleSuccessfulPurchase(req, res));
+app.get('/failedPurchase', (req, res) => handleFailedPurchase(req, res));
 
 const httpsServer = https.createServer({
     key: fs.readFileSync(privateKeyPath),
