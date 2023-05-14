@@ -2,6 +2,7 @@ require('dotenv').config();
 const { SERVER_SERIES } = process.env;
 const serverSeries = Number(SERVER_SERIES);
 
+
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const bcrypt = require("bcrypt");
@@ -234,7 +235,7 @@ exports.assignNewBot = async (req, res) => {
         }, JWT_SECRET);
 
         let q = `INSERT INTO bots (user_id, bot_id, bot_name, websites, server_series, token, bot_type) VALUES 
-        ('${userId}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, ${serverSeries}, '${dbToken}',${botType})`;
+        ('${userId}', '${botId}', ${mysql.escape(botName)}, ${mysql.escape(websites)}, ${serverSeries}, '${dbToken}','${botType}')`;
 
         try {
             await mysql.query(configPool, q);
