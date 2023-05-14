@@ -284,7 +284,7 @@ exports.assignNewBot = async (req, res) => {
         }
 
         const botToken = jwt.sign({
-            userName, serverSeries, botId, openAIKeys
+            userId, userName, serverSeries, botId, domains, openAIKeys
         }, JWT_SECRET, {expiresIn: '1h'});
 
         return res.status(200).json({botToken, serverSeries, botId});
