@@ -90,7 +90,7 @@ exports.verifyEmailToken = async (req, res) => {
 
         const { email, userName, password } = info;
 
-        console.log(info);
+        console.log('verifyEmailToken info', info);
 
         const passwordHash = await getPasswordHash(password);
         const userId = uuidv4();
@@ -121,7 +121,7 @@ const isValidUser = async (password, hash) =>
 }
 
 const getUserInfo = async (userName, password = '') => {
-    const q = `SELECT user_id, email, password, token FROM account WHERE user_name = ${mysql.escape(userName)}`;
+    const q = `SELECT user_id, server_series, email, password, token FROM account WHERE user_name = ${mysql.escape(userName)}`;
     return await mysql.query(configPool, q);
 }
 
@@ -139,6 +139,7 @@ const sendUserInfo = async (userName, res, password) => {
         const token = result[0].token;
         const userId = result[0].user_id;
         const email = result[0].email;
+        const serverSeries = result[0].server_series;
 
         const tokenInfo = exports.extractToken(token);
 
@@ -151,10 +152,10 @@ const sendUserInfo = async (userName, res, password) => {
         const hasKey = tokenInfo.msg.openAIKeys.length ? true : false;
 
         const newToken = jwt.sign({
-            userName, userId, email, openAIKeys: tokenInfo.msg.openAIKeys
+            userName, userId, email, serverSeries, openAIKeys: tokenInfo.msg.openAIKeys
         }, JWT_SECRET, {expiresIn: '12h'});
         
-        res.status(200).json({userId, userName, hasKey, token: newToken});
+        res.status(200).json({userId, userName, serverSeries, hasKey, token: newToken});
         return
 }
 
