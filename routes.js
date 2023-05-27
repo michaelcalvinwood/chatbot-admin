@@ -185,16 +185,17 @@ exports.setKey = async (req, res) => {
         const result = await getUserInfo(userName);
         const userId = result[0].user_id;
         const email = result[0].email;
+        const serverSeries = result[0].server_series;
 
         const hasKey = true;
 
         const newToken = jwt.sign({
-            userId, userName, email, openAIKeys: [key]
+            userId, userName, email, openAIKeys: [key], serverSeries
         }, JWT_SECRET, {expiresIn: '12h'});
 
         await updateToken(userName, newToken);
 
-        return res.status(200).json({userId, userName, email, hasKey, token: newToken});
+        return res.status(200).json({userId, userName, email, serverSeries, hasKey, token: newToken});
 }
 
 exports.assignNewBot = async (req, res) => {

@@ -285,6 +285,23 @@ const purchaseCredits = async (req, res) => {
 const handleSuccessfulPurchase = async (req, res) => {
     console.log('handleSuccessfulPurchase', req.query, pendingPurchases);
 
+    const { qty, userId } = req.query;
+
+    const secretKey = 'b498df3616de9697ded55df1618f4b7e196b0f770ec878098fda719aa9f0295d';
+
+    let request, result;
+
+    request = {
+        url:`ht`
+    }
+
+    try {
+        result = await axios(request);
+    } catch (err) {
+        console.error(err);
+        return res.redirect('https://instantchatbot.net/purchase/?failedPurchase=true');
+    }
+
 }
 
 app.use(express.static('public'));
