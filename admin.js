@@ -231,79 +231,6 @@ const deleteAccount = (req, res) => {
     })
 }
 
-const purchaseCredits = async (req, res) => {
-    url = '/home';
-
-    console.log('req.body', req.body);
-
-    let { userToken, quantity, cost, discount} = req.body;
-
-    if (!userToken || !quantity || !cost || typeof discount === 'undefined') return res.status(400).json('bad request');
-
-    const token = jwtUtil.getToken(userToken);
-
-    console.log('token', token);
-
-    const { userId, userName, email } = token;
-
-    if (isNaN(quantity)) return res.status(400).json('bad request 2');
-    if (isNaN(cost)) return res.status(400).json('bad request 3');
-
-    if (pendingPurchases[userId]) return res.status(400).json('bad request: already pending purchase');
-    else pendingPurchases[userId] = res;
-
-    quantity = Math.trunc(Number(quantity));
-
-    console.log ('quantity', quantity);
-
-    const session = await stripe.checkout.sessions.create({
-        payment_method_types: [
-            'card'
-        ],
-        mode: 'payment', // 'subscription' would be for recurring charges,
-        success_url: `https://admin.instantchatbot.net:6200/successfulPurchase?qty=${quantity}&userId=${userId}`,
-        cancel_url: `https://admin.instantchatbot.net:6200/failedPurchase?userId=${userId}`,
-        line_items: [
-            {
-                price_data: {
-                    currency: 'usd',
-                    product_data: {
-                        name: `Instant Chatbot Credit: ${quantity} Tokens`,
-                    },
-                    unit_amount: cost
-                },
-                quantity: 1
-            }
-        ]
-    })
-
-    res.status(200).send(session.url);
-   
-    
-}
-
-const handleSuccessfulPurchase = async (req, res) => {
-    console.log('handleSuccessfulPurchase', req.query, pendingPurchases);
-
-    const { qty, userId } = req.query;
-
-    const secretKey = 'b498df3616de9697ded55df1618f4b7e196b0f770ec878098fda719aa9f0295d';
-
-    let request, result;
-
-    request = {
-        url:`ht`
-    }
-
-    try {
-        result = await axios(request);
-    } catch (err) {
-        console.error(err);
-        return res.redirect('https://instantchatbot.net/purchase/?failedPurchase=true');
-    }
-
-}
-
 app.use(express.static('public'));
 app.use(express.json({limit: '200mb'})); 
 app.use(cors());
@@ -320,10 +247,8 @@ app.post('/newBot', (req, res) => routes.assignNewBot(req, res));
 app.post('/listBots', (req, res) => listBots(req, res));
 app.post('/deleteBot', (req, res) => deleteBot(req, res));
 app.post('/deleteAccount', (req, res) => deleteAccount(req, res));
-app.post('/purchaseCredits', (req, res) => purchaseCredits (req,res));
 
-app.get('/successfulPurchase', (req, res) => handleSuccessfulPurchase(req, res));
-app.get('/failedPurchase', (req, res) => handleFailedPurchase(req, res));
+
 
 const httpsServer = https.createServer({
     key: fs.readFileSync(privateKeyPath),

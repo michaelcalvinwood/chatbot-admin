@@ -209,23 +209,15 @@ exports.assignNewBot = async (req, res) => {
         if (!decodedToken.status) return res.status(401).json(decodedToken.msg);
 
         const tokenInfo = decodedToken.msg;
-        console.log('tokenInfo', tokenInfo);
+        console.log('assignNewBot tokenInfo', tokenInfo);
 
-        const {userName, userId, openAIKeys} = tokenInfo;
-        console.log('assignNewBot', userName, userId);
+        const {userName, userId, serverSeries, openAIKeys} = tokenInfo;
+        console.log('assignNewBot userName, userId, serverSeries', userName, userId, serverSeries);
 
         let response;
 
         // assign bot uuid
         const botId = uuidv4();
-
-        /*
-         * TODO: dynamically get names of these servers
-         */
-
-        const serverSeries = 1;
- 
-        // set bot info in bots table
 
         let domains = websites ? websites.replaceAll(',', "\n") : '';
         domains = domains.split("\n");
@@ -276,7 +268,7 @@ exports.assignNewBot = async (req, res) => {
             }
         }
 
-        console.log(request);
+        console.log("assignNewBot request", request);
 
         try {
             response = await axios(request);
